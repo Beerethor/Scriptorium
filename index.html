@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#8a2b1f">
+<title>Verba Currunt — trascrizione audio · Mala Tempora Currunt</title>
+<link rel="icon" href="logo.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+:root{--bg:#f6f3ec;--fg:#1d1b17;--card:#fff;--ac:#8a2b1f;--mu:#6b665c;--bd:#ddd6c6}
+@media (prefers-color-scheme:dark){:root{--bg:#16140f;--fg:#ece7da;--card:#211e17;--ac:#d9674f;--mu:#a29b8a;--bd:#3a352a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.55 Georgia,serif}
+main{max-width:820px;margin:0 auto;padding:32px 20px}
+header{display:flex;gap:16px;align-items:center;margin-bottom:24px}
+header img{width:64px;height:64px}
+h1{font-size:1.9rem;margin:0}
+.sub,.mu{color:var(--mu)}.sub{margin:2px 0 0}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:20px;margin-bottom:16px}
+label{display:block;font-weight:bold;margin:12px 0 4px}
+select,input[type=file],textarea,input.sp{padding:8px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--fg);font:inherit}
+select,input[type=file]{width:100%}
+textarea{width:100%;min-height:0}
+button{background:var(--ac);color:#fff;border:0;border-radius:6px;padding:10px 18px;font:inherit;cursor:pointer;margin:12px 8px 0 0}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.alt{background:transparent;color:var(--ac);border:1px solid var(--ac)}
+progress{width:100%;height:10px;margin-top:12px}
+#status{color:var(--mu);font-size:.9rem;margin-top:8px}
+.warn{color:var(--ac);font-size:.9rem;margin:8px 0 0}
+.chk{display:flex;gap:8px;align-items:flex-start;margin-top:14px;font-size:.9rem}
+.chk label{font-weight:normal;margin:0}
+ul#queue{list-style:none;padding:0;margin:8px 0}
+ul#queue li{padding:4px 0;border-bottom:1px solid var(--bd)}
+ul#queue li.sel{font-weight:bold}
+button.link{background:none;color:var(--fg);text-decoration:underline;padding:0;margin:0;font-weight:inherit;text-align:left}
+button.x{background:none;color:var(--mu);padding:0 6px;margin:0 0 0 8px}
+audio{width:100%}
+#rows{max-height:55vh;overflow:auto;margin:10px 0}
+.row{display:grid;grid-template-columns:auto 84px 1fr;gap:8px;align-items:start;margin:6px 0;padding:4px;border-radius:6px}
+.row.on{outline:2px solid var(--ac)}
+.row button{margin:0;padding:6px 10px}
+details{margin-top:12px}
+footer{font-size:.8rem;color:var(--mu);border-top:1px solid var(--bd);padding-top:16px;margin-top:28px}
+footer a{color:var(--ac)}
+@media(max-width:560px){.row{grid-template-columns:auto 1fr}.row textarea{grid-column:1/-1}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js"></script>
+</head>
+<body>
+<main>
+<header>
+<img src="logo.svg" alt="Logo Verba Currunt">
+<div><h1>Verba Currunt</h1><p class="sub">Uno scriptorium digitale: da audio a testo, nel tuo browser. Di <strong>Beerethor</strong> · Mala Tempora Currunt</p></div>
+</header>
+
+<div class="card">
+<label for="file">File audio o video (anche più di uno, o trascinali qui)</label>
+<input type="file" id="file" accept="audio/*,video/*" multiple>
+<button id="mic" class="alt">● Registra dal microfono</button>
+<label for="model">Modello</label>
+<select id="model">
+<option value="onnx-community/whisper-tiny">Tiny — velocissimo, qualità bassa (~40 MB)</option>
+<option value="onnx-community/whisper-base">Base — veloce, precisione media (~80 MB)</option>
+<option value="onnx-community/whisper-small" selected>Small — buona precisione (~250 MB)</option>
+<option value="onnx-community/whisper-large-v3-turbo">Large v3 Turbo — massima precisione, richiede WebGPU (~1,5 GB)</option>
+</select>
+<label for="lang">Lingua</label>
+<select id="lang">
+<option value="italian" selected>Italiano</option><option value="english">Inglese</option>
+<option value="french">Francese</option><option value="spanish">Spagnolo</option>
+<option value="german">Tedesco</option><option value="">Rilevamento automatico</option>
+</select>
+<label for="engine">Motore</label>
+<select id="engine"><option value="auto" selected>Automatico (GPU se disponibile)</option><option value="gpu">Solo GPU (WebGPU)</option><option value="wasm">Solo CPU (più lento, più compatibile)</option></select>
+<div class="chk"><input type="checkbox" id="beams" checked><label for="beams">Alta precisione (beam search): più lenta, di solito meno errori</label></div>
+<p id="devnote" class="warn"></p>
+<div class="chk"><input type="checkbox" id="ok"><label for="ok">Dichiaro di avere il diritto di trascrivere questi contenuti e, se contengono voci di terzi, di aver ottenuto i consensi necessari.</label></div>
+<button id="go" disabled>Trascrivi tutto</button><button id="stop" class="alt" hidden>Annulla</button>
+<progress id="bar" value="0" max="100" hidden></progress>
+<div id="status"></div>
+</div>
+
+<div class="card" id="qcard" hidden>
+<strong>Coda e archivio</strong> <span class="mu">(salvati nel tuo browser)</span>
+<ul id="queue"></ul>
+<button id="all" class="alt">Tutti i Word formattati</button><button id="wipe" class="alt">Elimina tutto</button>
+</div>
+
+<div class="card" id="ed" hidden>
+<audio id="player" controls></audio>
+<p class="mu" style="margin:8px 0 0">Clic su ▶ per ascoltare da quel punto. Modifica il testo e, se vuoi, assegna una voce a ogni riga.</p>
+<div id="rows"></div>
+<details><summary>Glossario di correzioni</summary>
+<p class="mu">Una regola per riga: <code>errato = corretto</code>. Si applica da solo ai nuovi blocchi; il pulsante lo applica a tutto il testo già trascritto.</p>
+<textarea id="gl" rows="4" placeholder="nome sbagliato = Nome Corretto"></textarea>
+<button id="glgo" class="alt">Applica a tutto</button></details>
+<button id="redo" class="alt">Ritrascrivi con le impostazioni attuali</button>
+<div class="chk"><input type="checkbox" id="ts" checked><label for="ts">Includi i timestamp nel Word formattato</label></div>
+<p id="exmsg" class="warn"></p>
+<button id="dl-txt" class="alt">.txt</button><button id="dl-srt" class="alt">.srt</button><button id="dl-raw" class="alt">Word semplice</button><button id="dl-fmt">Word formattato</button><button id="cp" class="alt">Copia</button>
+</div>
+
+<footer>
+<p><strong>Privacy.</strong> L’audio viene elaborato localmente sul tuo dispositivo e non viene mai caricato su nostri server. Al primo utilizzo il modello viene scaricato da Hugging Face e conservato nella cache del browser. Per permetterti di riprendere il lavoro, file e trascrizioni restano salvati nel tuo browser (IndexedDB) finché non li elimini con «×» o «Elimina tutto». Il microfono si attiva solo se premi «Registra».</p>
+<p><strong>Esclusione di garanzia.</strong> Il servizio è fornito «così com’è», senza garanzie di alcun tipo. Le trascrizioni automatiche possono contenere errori, omissioni o testo inventato: verificale prima di qualsiasi uso rilevante. L’utente è l’unico responsabile dei contenuti trascritti e del rispetto di diritto d’autore, riservatezza e normativa sulla protezione dei dati (GDPR) relativi ai propri file.</p>
+<p><strong>Paternità e licenze.</strong> © 2026 Beerethor · Mala Tempora Currunt. Il codice è rilasciato con licenza MIT; il nome «Verba Currunt» e il logo non sono compresi nella licenza. Si basa su <a href="https://github.com/openai/whisper">Whisper</a> di OpenAI (MIT), <a href="https://github.com/huggingface/transformers.js">Transformers.js</a> (Apache 2.0) e <a href="https://github.com/dolanmiu/docx">docx</a> (MIT). Whisper, OpenAI e Hugging Face sono marchi dei rispettivi titolari, non affiliati a questo progetto. Dettagli in NOTICE.md.</p>
+</footer>
+</main>
+
+<script type="module">
+const $ = id => document.getElementById(id);
+const h = (t, p = {}, ...c) => { const e = Object.assign(document.createElement(t), p); e.append(...c); return e; };
+const SR = 16000, player = $("player");
+let worker, loadedModel = null, hooks = {}, items = [], cur = null, busy = false, cancelled = false, rows = [], hl = -1, gl = [];
+
+const status = t => { $("status").textContent = t; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const pad = (n, l = 2) => String(n).padStart(l, "0");
+const short = s => pad(Math.floor(s / 60)) + ":" + pad(Math.floor(s % 60));
+const clock = (s, comma) => { const x = (s % 60).toFixed(3).padStart(6, "0"); return pad(Math.floor(s / 3600)) + ":" + pad(Math.floor(s % 3600 / 60)) + ":" + (comma ? x.replace(".", ",") : x); };
+const mmss = s => { s = Math.max(0, Math.round(s)); return Math.floor(s / 60) + " min " + pad(s % 60) + " s"; };
+const base = it => it.name.replace(/\.[^.]+$/, "") || "trascrizione";
+const saveBlob = (n, b) => { const a = h("a", { href: URL.createObjectURL(b), download: n, style: "display:none" }); document.body.append(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(a.href); }, 4000); };
+
+/* ---------- archivio nel browser (IndexedDB) ---------- */
+const dbp = new Promise((res, rej) => {
+  const r = indexedDB.open("scriptorium", 1);
+  r.onupgradeneeded = () => ["items", "blobs"].forEach(n => r.result.createObjectStore(n, { keyPath: "id" }));
+  r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+});
+const idb = (store, mode, fn) => dbp.then(d => new Promise((res, rej) => {
+  const t = d.transaction(store, mode), rq = fn(t.objectStore(store));
+  t.oncomplete = () => res(rq && rq.result); t.onerror = () => rej(t.error);
+})).catch(() => null);
+const save = it => { const { blob, _t, ...meta } = it; return idb("items", "readwrite", s => s.put(meta)); };
+const saveSoon = it => { clearTimeout(it._t); it._t = setTimeout(() => save(it), 600); };
+async function blobOf(it) {
+  if (!it.blob) { const r = await idb("blobs", "readonly", s => s.get(it.id)); it.blob = r && r.blob; }
+  if (!it.blob) throw new Error("file audio non trovato nell’archivio");
+  return it.blob;
+}
+
+/* ---------- worker ---------- */
+function newWorker() {
+  worker = new Worker("worker.js", { type: "module" }); loadedModel = null;
+  worker.onmessage = ({ data: d }) => {
+    if (d.type === "progress") $("bar").value = d.value;
+    else if (d.type === "warn") $("devnote").textContent = d.message;
+    else if (d.type === "error") hooks.error && hooks.error(new Error(d.message));
+    else hooks[d.type] && hooks[d.type](d);
+  };
+}
+const ask = (msg, onChunk, transfer) => new Promise((res, rej) => {
+  hooks = { ready: res, done: res, chunk: onChunk, error: rej, abort: () => rej(new Error("annullato")) };
+  worker.postMessage(msg, transfer || []);
+});
+newWorker();
+
+async function decode(blob) {
+  const ctx = new AudioContext({ sampleRate: SR });
+  const buf = await ctx.decodeAudioData(await blob.arrayBuffer()); ctx.close();
+  if (buf.numberOfChannels === 1) return normalize(buf.getChannelData(0).slice());
+  const out = new Float32Array(buf.length), ch = buf.numberOfChannels;
+  for (let c = 0; c < ch; c++) { const d = buf.getChannelData(c); for (let i = 0; i < d.length; i++) out[i] += d[i] / ch; }
+  return normalize(out);
+}
+// Porta al 90% il picco di registrazioni troppo basse (guadagno massimo ×8), senza mai andare in distorsione.
+function normalize(a) {
+  let pk = 0; for (let i = 0; i < a.length; i++) { const v = Math.abs(a[i]); if (v > pk) pk = v; }
+  if (pk > 0 && pk < 0.9) { const g = Math.min(8, 0.9 / pk); for (let i = 0; i < a.length; i++) a[i] *= g; }
+  return a;
+}
+
+/* ---------- glossario ---------- */
+function parseGl() {
+  try { localStorage.setItem("scriptorium-glossario", $("gl").value); } catch {}
+  gl = [];
+  $("gl").value.split("\n").forEach(l => {
+    const i = l.indexOf("="), a = i > 0 ? l.slice(0, i).trim() : "";
+    if (!a) return;
+    try { gl.push([new RegExp("(?<![\\p{L}\\p{N}])" + a.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\p{L}\\p{N}])", "giu"), l.slice(i + 1).trim()]); } catch {}
+  });
+}
+const applyGl = segs => { gl.forEach(([re, b]) => segs.forEach(s => { s.text = s.text.replace(re, () => b); })); return segs; };
+try { $("gl").value = localStorage.getItem("scriptorium-glossario") || ""; } catch {}
+parseGl(); $("gl").oninput = parseGl;
+$("glgo").onclick = () => { items.forEach(it => { applyGl(it.segments); save(it); }); if (cur) renderRows(); status("Glossario applicato."); };
+
+/* ---------- editor ---------- */
+function rowFor(s) {
+  const ta = h("textarea", { rows: 2, value: s.text, oninput: () => { s.text = ta.value; saveSoon(cur); } });
+  const sp = h("input", { className: "sp", placeholder: "Voce", value: s.speaker || "", oninput: () => { s.speaker = sp.value.trim(); saveSoon(cur); } });
+  const t = h("button", { className: "alt", textContent: "▶ " + short(s.start), onclick: () => { player.currentTime = s.start; player.play(); } });
+  return h("div", { className: "row" }, t, sp, ta);
+}
+function renderRows() {
+  rows = cur.segments.map(rowFor); hl = -1;
+  $("rows").replaceChildren(...rows);
+}
+player.ontimeupdate = () => {
+  if (!cur) return;
+  const t = player.currentTime; let k = -1;
+  for (let i = 0; i < cur.segments.length; i++) { if (cur.segments[i].start <= t) k = i; else break; }
+  if (k !== hl) {
+    rows[hl]?.classList.remove("on"); rows[k]?.classList.add("on"); hl = k;
+    if (!player.paused) rows[k]?.scrollIntoView({ block: "nearest" });
+  }
+};
+async function select(it) {
+  cur = it;
+  try { await blobOf(it); } catch (e) { status(e.message); }
+  if (player.src) URL.revokeObjectURL(player.src);
+  if (it.blob) player.src = URL.createObjectURL(it.blob); else player.removeAttribute("src");
+  renderRows(); refresh(); $("ed").hidden = false;
+}
+
+/* ---------- coda ---------- */
+const PENDING = ["attesa", "interrotto", "errore"];
+function updateGo() { $("go").disabled = busy || !$("ok").checked || !items.some(i => PENDING.includes(i.status)); }
+function refresh() {
+  $("queue").replaceChildren(...items.map(it => h("li", { className: it === cur ? "sel" : "" },
+    h("button", { className: "link", textContent: it.name, onclick: () => select(it) }),
+    h("span", { className: "mu", textContent: " — " + it.status + (it.resumeAt && it.duration && it.status !== "fatto" ? " (" + Math.round(100 * it.resumeAt / (it.duration * SR)) + "%)" : "") }),
+    h("button", { className: "x", textContent: "×", title: "Elimina", onclick: () => del(it) }))));
+  $("qcard").hidden = !items.length; updateGo();
+}
+async function addFiles(fl) {
+  for (const f of fl) {
+    const it = { id: crypto.randomUUID(), created: Date.now(), name: f.name, status: "attesa", segments: [], resumeAt: 0, blob: f };
+    items.push(it);
+    await idb("blobs", "readwrite", s => s.put({ id: it.id, blob: f })); save(it);
+  }
+  refresh(); if (!cur && items.length) select(items[0]);
+}
+async function del(it) {
+  if (busy && it.status === "in corso") return status("Annulla prima la trascrizione in corso.");
+  items = items.filter(i => i !== it);
+  await idb("items", "readwrite", s => s.delete(it.id)); await idb("blobs", "readwrite", s => s.delete(it.id));
+  if (cur === it) { cur = null; $("ed").hidden = true; player.removeAttribute("src"); }
+  refresh();
+}
+$("file").onchange = () => { addFiles([...$("file").files]); $("file").value = ""; };
+addEventListener("dragover", e => e.preventDefault());
+addEventListener("drop", e => { e.preventDefault(); addFiles([...e.dataTransfer.files].filter(f => /^(audio|video)\//.test(f.type))); });
+$("ok").onchange = updateGo;
+$("wipe").onclick = async () => { if (confirm("Eliminare tutti i file e le trascrizioni salvati in questo browser?")) for (const it of [...items]) await del(it); };
+
+/* ---------- registrazione ---------- */
+let rec = null, recChunks = [];
+$("mic").onclick = async () => {
+  if (rec) { rec.stop(); return; }
+  try {
+    const st = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const r = rec = new MediaRecorder(st); recChunks = [];
+    r.ondataavailable = e => e.data.size && recChunks.push(e.data);
+    r.onstop = () => {
+      st.getTracks().forEach(t => t.stop());
+      const type = r.mimeType || "audio/webm", ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+      const name = "registrazione-" + new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-") + "." + ext;
+      rec = null; $("mic").textContent = "● Registra dal microfono";
+      addFiles([new File(recChunks, name, { type })]);
+    };
+    r.start(1000); $("mic").textContent = "■ Ferma registrazione";
+  } catch (e) { status("Microfono non disponibile: " + e.message); }
+};
+
+/* ---------- trascrizione ---------- */
+async function processItem(it) {
+  it.status = "in corso"; refresh();
+  if (!it.resumeAt) { it.model = $("model").value; it.lang = $("lang").value; it.engine = $("engine").value; it.beams = $("beams").checked; it.segments = []; if (it === cur) renderRows(); }
+  const blob = await blobOf(it);
+  const key = it.model + "|" + (it.engine || "auto");
+  if (loadedModel !== key) {
+    status("Scarico il modello (solo la prima volta)…"); $("bar").value = 0;
+    await ask({ type: "load", model: it.model, engine: it.engine || "auto" }); loadedModel = key;
+  }
+  $("bar").removeAttribute("value"); status("Decodifico " + it.name + "…");
+  const audio = await decode(blob);
+  if (cancelled) throw new Error("annullato");
+  it.duration = audio.length / SR;
+  const from = it.resumeAt || 0, t0 = Date.now();
+  status("Trascrivo " + it.name + "…");
+  await ask({ type: "run", audio, lang: it.lang, startAt: from, beams: it.beams !== false }, d => {
+    const fresh = applyGl(d.segments);
+    it.segments.push(...fresh); it.resumeAt = d.pos;
+    if (it === cur) fresh.forEach(s => { const r = rowFor(s); rows.push(r); $("rows").append(r); });
+    const f = (d.pos - from) / (d.len - from), el = (Date.now() - t0) / 1000;
+    $("bar").value = 100 * f;
+    status(it.name + " — " + Math.round(100 * d.pos / d.len) + "% · circa " + mmss(el / f - el) + " rimanenti");
+    save(it);
+  }, [audio.buffer]);
+  it.status = "fatto"; it.resumeAt = 0;
+}
+async function runQueue() {
+  if (busy) return;
+  busy = true; cancelled = false; $("stop").hidden = false; $("bar").hidden = false; updateGo();
+  let wake = null; try { wake = await navigator.wakeLock?.request("screen"); } catch {}
+  let failed = false;
+  for (const it of items.filter(i => PENDING.includes(i.status))) {
+    if (cancelled) break;
+    try { await processItem(it); }
+    catch (e) {
+      console.error(e);
+      if (cancelled) { it.status = "interrotto"; status("Interrotto: puoi riprendere da dove eri arrivato."); }
+      else { it.status = "errore"; failed = true; status("Errore su " + it.name + ": " + e.message + " — prova un modello più piccolo o un file più corto."); }
+    }
+    await save(it); refresh();
+  }
+  if (!cancelled && !failed) status("Fatto.");
+  busy = false; $("stop").hidden = true; $("bar").hidden = true; try { wake && wake.release(); } catch {}
+  refresh();
+}
+$("go").onclick = runQueue;
+$("stop").onclick = () => { cancelled = true; worker.terminate(); hooks.abort && hooks.abort(); newWorker(); };
+
+/* ---------- avvisi sul dispositivo ---------- */
+function devNote() {
+  const gpu = !!navigator.gpu, v = $("model").value, big = /large/.test(v), small = /small/.test(v), eng = $("engine").value;
+  const weak = /Android|iPhone|iPad|Mobi/i.test(navigator.userAgent) || (navigator.deviceMemory && navigator.deviceMemory <= 4);
+  $("devnote").textContent =
+    big && (!gpu || eng === "wasm") ? "Large v3 Turbo richiede WebGPU: con questo browser o con «Solo CPU» non parte. Scegli Small."
+    : big && weak ? "Large v3 Turbo richiede circa 1,5 GB di memoria: su telefoni o dispositivi con poca RAM può non partire."
+    : !gpu || eng === "wasm" ? "Senza WebGPU la trascrizione usa la CPU ed è molto più lenta." + (small ? " Con Small, un file lungo può richiedere molto più della sua durata." : "")
+    : weak && small ? "Su questo dispositivo Small potrebbe esaurire la memoria: valuta Base." : "";
+}
+$("model").onchange = $("engine").onchange = devNote; devNote();
+
+/* ---------- esportazione ---------- */
+function paras(it) {
+  const out = []; let c = null;
+  it.segments.forEach(s => {
+    if (!c || (s.speaker || "") !== c.speaker || s.start - c.last > 2 || c.text.length > 450) { c = { start: s.start, speaker: s.speaker || "", text: "", last: 0 }; out.push(c); }
+    c.text += (c.text ? " " : "") + s.text; c.last = s.end ?? s.start;
+  });
+  return out;
+}
+const plain = it => paras(it).map(p => (p.speaker ? p.speaker + ": " : "") + p.text).join("\n\n");
+const srt = it => it.segments.map((s, i) => (i + 1) + "\n" + clock(s.start, true) + " --> " + clock(s.end ?? s.start + 2, true) + "\n" + (s.speaker ? s.speaker + ": " : "") + s.text + "\n").join("\n");
+const txtBlob = t => new Blob([t], { type: "text/plain;charset=utf-8" });
+
+const needDocx = () => { if (typeof docx === "undefined") throw new Error("libreria Word non caricata: controlla la connessione e ricarica la pagina"); };
+async function rawDoc(it) {
+  needDocx();
+  const { Document, Packer, Paragraph } = docx;
+  return Packer.toBlob(new Document({ sections: [{ children: plain(it).split("\n\n").map(t => new Paragraph(t)) }] }));
+}
+async function fmtDoc(it) {
+  needDocx();
+  const { Document, Packer, Paragraph, TextRun, AlignmentType, Header, Footer, PageNumber, BorderStyle } = docx;
+  const grey = "6B665C", red = "8A2B1F", withTs = $("ts").checked, last = it.segments[it.segments.length - 1];
+  const dur = it.duration || (last ? last.end ?? last.start : 0);
+  const ln = [...$("lang").options].find(o => o.value === it.lang)?.text || "Automatico";
+  const meta = [["File", it.name], ["Data", new Date().toLocaleDateString("it-IT")], ["Durata", short(dur)], ["Modello", (it.model || "").split("/")[1] || "-"], ["Lingua", ln]];
+  const kids = [new Paragraph({ children: [new TextRun({ text: "Trascrizione", bold: true, size: 56, color: red })], spacing: { after: 120 } })];
+  meta.forEach(([k, v]) => kids.push(new Paragraph({ children: [new TextRun({ text: k + ": ", bold: true, color: grey }), new TextRun(v)] })));
+  kids.push(new Paragraph({ border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: red, space: 6 } }, spacing: { after: 240 } }));
+  paras(it).forEach(p => {
+    const runs = [];
+    if (withTs) runs.push(new TextRun({ text: "[" + short(p.start) + "]  ", bold: true, color: red, size: 20 }));
+    if (p.speaker) runs.push(new TextRun({ text: p.speaker + ": ", bold: true }));
+    runs.push(new TextRun(p.text));
+    kids.push(new Paragraph({ children: runs, spacing: { after: 160, line: 320 }, alignment: AlignmentType.JUSTIFIED }));
+  });
+  kids.push(new Paragraph({ children: [new TextRun({ text: "Trascrizione automatica generata con Verba Currunt: può contenere errori, da verificare prima dell’uso.", italics: true, size: 18, color: grey })], spacing: { before: 360 } }));
+  return Packer.toBlob(new Document({
+    creator: "Verba Currunt — Mala Tempora Currunt", title: "Trascrizione — " + base(it),
+    styles: { default: { document: { run: { font: "Georgia", size: 23 } } } },
+    sections: [{
+      properties: { page: { margin: { top: 1300, bottom: 1300, left: 1300, right: 1300 } } },
+      headers: { default: new Header({ children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: "Verba Currunt · Mala Tempora Currunt", size: 16, color: grey })] })] }) },
+      footers: { default: new Footer({ children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ children: ["© 2026 Beerethor · Pagina ", PageNumber.CURRENT, " di ", PageNumber.TOTAL_PAGES], size: 16, color: grey })] })] }) },
+      children: kids }]
+  }));
+}
+const msg = t => { $("exmsg").textContent = t; status(t); };
+const need = () => cur && cur.segments.length ? cur : (msg("Niente da esportare: la trascrizione è vuota o non è ancora terminata."), null);
+const exp = fn => async () => {
+  const it = need(); if (!it) return;
+  try { msg("Preparo il file…"); await fn(it); msg("File pronto: controlla i download del browser."); }
+  catch (e) { console.error(e); msg("Errore nell’esportazione: " + e.message); }
+};
+$("dl-txt").onclick = exp(async it => saveBlob(base(it) + ".txt", txtBlob(plain(it))));
+$("dl-srt").onclick = exp(async it => saveBlob(base(it) + ".srt", txtBlob(srt(it))));
+$("dl-raw").onclick = exp(async it => saveBlob(base(it) + "_semplice.docx", await rawDoc(it)));
+$("dl-fmt").onclick = exp(async it => saveBlob(base(it) + "_formattato.docx", await fmtDoc(it)));
+$("cp").onclick = exp(async it => { await navigator.clipboard.writeText(plain(it)); });
+$("all").onclick = async () => {
+  const done = items.filter(i => i.status === "fatto" && i.segments.length);
+  if (!done.length) return msg("Nessuna trascrizione completata da esportare.");
+  try {
+    msg("Scarico " + done.length + " file Word… se il browser lo chiede, consenti i download multipli.");
+    for (const it of done) { saveBlob(base(it) + "_formattato.docx", await fmtDoc(it)); await sleep(600); }
+    msg("File pronti: controlla i download del browser.");
+  } catch (e) { console.error(e); msg("Errore nell’esportazione: " + e.message); }
+};
+
+$("redo").onclick = () => {
+  if (!cur) return msg("Seleziona prima un file.");
+  if (busy) return msg("Attendi la fine della trascrizione in corso.");
+  if (!confirm("Ritrascrivere da capo questo file? Le modifiche manuali andranno perse.")) return;
+  cur.segments = []; cur.resumeAt = 0; cur.status = "attesa"; save(cur); renderRows(); refresh();
+  msg("Pronto: scegli modello e motore, poi premi «Trascrivi tutto».");
+};
+
+/* ---------- avvio: ripristino dall'archivio e PWA ---------- */
+(async () => {
+  const saved = await idb("items", "readonly", s => s.getAll());
+  if (saved && saved.length) {
+    items = saved.sort((a, b) => a.created - b.created);
+    items.forEach(i => { if (i.status === "in corso") i.status = "interrotto"; });
+    refresh(); await select(items[0]);
+    status(items.length + " element" + (items.length === 1 ? "o ripristinato" : "i ripristinati") + " dal browser. Gli interrotti riprendono da dove erano.");
+  }
+})();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+</script>
+</body>
+</html>
